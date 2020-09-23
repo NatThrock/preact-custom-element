@@ -4,8 +4,9 @@ export default function register(Component, tagName, propNames, options) {
 	function PreactElement() {
 		const inst = Reflect.construct(HTMLElement, [], PreactElement);
 		inst._vdomComponent = Component;
+		inst._shadow = options && options.shadow;
 		inst._root =
-			options && options.shadow ? inst.attachShadow({ mode: 'open' }) : inst;
+			inst._shadow ? inst.attachShadow({ mode: 'open' }) : inst;
 		return inst;
 	}
 	PreactElement.prototype = Object.create(HTMLElement.prototype);
@@ -63,6 +64,15 @@ function ContextProvider(props) {
 }
 
 function connectedCallback() {
+	// Move template contents into a real shadow root. Templates don't get
+	// rendered so this won't cause a flash of unstyled content or document
+	// reflow. See issue #52.
+	const shadowTemplate = this.querySelector('template[data-shadow-root]');
+	if (this._shadow && shadowTemplate) {
+		const content = shadowTemplate.content.cloneNode(true);
+		shadowTemplate.remove();
+		this.shadowRoot.appendChild(content);
+	}
 	// Obtain a reference to the previous context by pinging the nearest
 	// higher up node that was rendered with Preact. If one Preact component
 	// higher up receives our ping, it will set the `detail` property of
@@ -149,7 +159,7 @@ function toVdom(element, nodeName) {
 	for (i = cn.length; i--; ) {
 		const vnode = toVdom(cn[i], null);
 		// Move slots correctly
-		const name = cn[i].slot;
+		const name = cn[i].name;
 		if (name) {
 			props[name] = h(Slot, { name }, vnode);
 		} else {
